@@ -1,14 +1,20 @@
 package com.xybbz.config;
 
+import cn.hutool.core.collection.CollectionUtil;
+import cn.hutool.core.util.ArrayUtil;
 import com.sun.xml.internal.bind.v2.TODO;
 import lombok.AllArgsConstructor;
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.net.ftp.FTP;
 import org.apache.commons.net.ftp.FTPClient;
+import org.apache.commons.net.ftp.FTPFile;
 import org.apache.commons.net.ftp.FTPReply;
 
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 
 public class FtpClientUtil {
@@ -26,7 +32,10 @@ public class FtpClientUtil {
             if (f.open()) {
                 // 远程路径为相对路径
                 // todo 2020-11-25 17:55:xx 未完成
-//                f.get();
+//                f.get("/opt/IBM/WebSphere/AppServer/profiles/AppSrv01/qunarlog.txt", "E:/zhangjun.txt");
+                List<String> fileNameList = f.getFileNameList("/opt/");
+                System.out.println(fileNameList);
+                f.close();
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -143,10 +152,11 @@ public class FtpClientUtil {
                     ftpClient.changeWorkingDirectory(new String(ftpPath.getBytes(), StandardCharsets.ISO_8859_1));
                 }
             } else {
-                // 多层目录循环创建
+                // todo 查看多层目录返回的是什么
+                // 多层目录循环设置工作目录
                 String[] paths = ftpPath.split("/");
                 for (String path : paths) {
-                    ftpClient.makeDirectory(new String(path.getBytes(), StandardCharsets.ISO_8859_1));
+//                    ftpClient.makeDirectory(new String(path.getBytes(), StandardCharsets.ISO_8859_1));
                     ftpClient.changeWorkingDirectory(new String(path.getBytes(), StandardCharsets.ISO_8859_1));
                 }
             }
@@ -171,6 +181,119 @@ public class FtpClientUtil {
             }
         }
         return buStr.toString();
+    }
+
+    //更换文件路径
+    private boolean cd(String dir) throws IOException {
+        //更改文件路径
+        if (ftpClient.changeWorkingDirectory(dir)) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    /**
+     * 获取目录下所有的文件名称
+     *
+     * @param filePath
+     * @return
+     * @throws IOException
+     */
+    private FTPFile[] getFileList(String filePath) throws IOException {
+        FTPFile[] ftpFiles = ftpClient.listFiles(filePath);
+        return ftpFiles;
+    }
+
+    /**
+     * 上传文件到FTP服务器
+     *
+     * @param localPathAndFileName 本地文件目录和文件名
+     * @param ftpFileName          上传后的文件名
+     * @param ftpDirectory         FTP目录如:/path1/pathb2/,如果目录不存在回自动创建目录
+     * @throws Exception
+     */
+    public boolean put(String localPathAndFileName, String ftpFileName, String ftpDirectory) {
+        if (!ftpClient.isConnected()) {
+            return false;
+        }
+        boolean flag = false;
+        if (ftpClient != null) {
+            File file = new File(localPathAndFileName);
+            FileInputStream fileInputStream = null;
+            try {
+                fileInputStream = new FileInputStream(file);
+                //创建目录
+                this.mkDir(ftpDirectory);
+
+                //设置缓冲区大小
+                ftpClient.setBufferSize(1024);
+                //设置编码
+                ftpClient.setControlEncoding("UTF-8");
+
+                //设置文件类型 转换为二进制文件
+                ftpClient.setFileType(FTPClient.BINARY_FILE_TYPE);
+
+                flag = ftpClient.storeFile(new String(ftpFileName.getBytes(), StandardCharsets.ISO_8859_1), fileInputStream);
+
+
+            } catch (Exception e) {
+                this.close();
+                return false;
+            } finally {
+                IOUtils.closeQuietly(fileInputStream);
+            }
+        }
+        return flag;
+    }
+
+    /**
+     * 循环创建目录，并且创建完目录后，设置工作目录为当前创建的目录下
+     */
+    public boolean mkDir(String ftpPath) {
+        if (!ftpClient.isConnected()) {
+            return false;
+        }
+        try {
+            // 将路径中的斜杠统一
+            ftpPath = this.conversion(ftpPath);
+
+            if (ftpPath.indexOf('/') == -1) {
+                // 只有一层目录
+                ftpClient.makeDirectory(new String(ftpPath.getBytes(), StandardCharsets.ISO_8859_1));
+                ftpClient.changeWorkingDirectory(new String(ftpPath.getBytes(), StandardCharsets.ISO_8859_1));
+            } else {
+                // 多层目录循环创建
+                String[] paths = ftpPath.split("/");
+                for (String path : paths) {
+                    ftpClient.makeDirectory(new String(path.getBytes(), StandardCharsets.ISO_8859_1));
+                    ftpClient.changeWorkingDirectory(new String(path.getBytes(), StandardCharsets.ISO_8859_1));
+                }
+            }
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    /**
+     * 返回FTP目录下的文件列表
+     *
+     * @param ftpDirectory
+     * @return
+     */
+    public List<String> getFileNameList(String ftpDirectory) {
+        List<String> list = new ArrayList<>();
+        if (!open()) {
+            return list;
+        }
+        try {
+            String[] strings = ftpClient.listNames(ftpDirectory);
+            list = CollectionUtil.newArrayList(strings);
+            System.out.println(list);
+        }catch (Exception e) {
+            e.printStackTrace();
+        }
+        return list;
     }
 }
 
